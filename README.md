@@ -12,5 +12,4 @@ If you do not have opam, install it.
 If you do not have obuild, install it: `opam install obuild`.
 
 Then, run
-`obuild configure
-obuild build`
+`obuild configure && obuild build`
