@@ -21,19 +21,22 @@
  *****************************************************************************)
 
 type feature = int
-type dataval = feature * int
-type data = dataval array
-type 'a trainval = {
+type category = int
+type dataVal = feature * int
+type data = dataVal array
+type trainVal = {
 	data : data ;
-	category : 'a
+	category : category
 }
-type 'a trainset = {
-	set : 'a trainval list ;
+type trainSet = {
+	set : trainVal list ;
 	nbFeatures : int ;
-	featureMax : int array (* Max value for the feature a *)
+	featureMax : int array ; (* Max value for the feature a *)
+	nbCategories : int ;
+	setSize : int (* number of training values in the training set *)
 }
 
-module DVMap = Map.Make (struct type t = dataval let compare = compare end)
+module DVMap = Map.Make (struct type t = dataVal let compare = compare end)
 
-type 'a decisiontree = DecisionLeaf of 'a
-	| DecisionNode of feature * 'a decisiontree DVMap.t
+type decisionTree = DecisionLeaf of category
+	| DecisionNode of feature * decisionTree DVMap.t
