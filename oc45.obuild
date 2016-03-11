@@ -1,0 +1,11 @@
+name: OC4.5
+version: 0.1
+description: This project aims to provide a pure OCaml implementation of C4.5.
+licence: LGPLv3
+obuild-ver: 1
+authors: Théophile Bastian <contact@tobast.fr>, Noémie Fong
+homepage: https://github.com/tobast/OC4.5/
+library OC4.5
+  modules: DataTypes, C45
+  src-dir: src
+  build-deps:
