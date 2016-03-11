@@ -22,7 +22,7 @@
 
 type feature = int
 type category = int
-type dataVal = feature * int
+type dataVal = int
 type data = dataVal array
 type trainVal = {
 	data : data ;
@@ -32,6 +32,7 @@ type trainSet = {
 	set : trainVal list ;
 	nbFeatures : int ;
 	featureMax : int array ; (* Max value for the feature a *)
+	featContinuity : bool array ;
 	nbCategories : int ;
 	setSize : int (* number of training values in the training set *)
 }
@@ -39,4 +40,6 @@ type trainSet = {
 module DVMap = Map.Make (struct type t = dataVal let compare = compare end)
 
 type decisionTree = DecisionLeaf of category
-	| DecisionNode of feature * decisionTree DVMap.t
+	| DecisionDiscreteNode of feature * decisionTree DVMap.t
+	| DecisionContinuousNode of feature * int (* threshold *) *
+			decisionTree (* lower *) * decisionTree (* upper *)
