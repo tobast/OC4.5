@@ -9,3 +9,7 @@ library OC4.5
   modules: DataTypes, C45
   src-dir: src
   build-deps:
+executable randgen
+  main-is: test.ml
+  src-dir: src
+  build-deps:
