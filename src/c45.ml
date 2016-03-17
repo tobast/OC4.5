@@ -67,6 +67,7 @@ let rec c45 trainset =
 				(Array.to_list catCount))
 	in
 
+	let contGains = Array.make (trainset.nbFeatures) 0. in
 	let findContThreshold ft =
 		let sorted=ref (List.sort
 			(fun tv1 tv2 -> tv1.data.(ft) - tv2.data.(ft)) trainset.set) in
@@ -82,21 +83,19 @@ let rec c45 trainset =
 		in
 		let totInfo = entropyWithTab leftFreq !leftCard in
 		let addCell tab id v = tab.(id) <- tab.(id) + v in
-		let nextEntropy () =
-			if !sorted = [] ; then
-				raise Not_found
-			else begin
-				let head = List.hd !sorted in
-				sorted := List.tl !sorted;
+		let nextEntropy () = (match !sorted with
+			| _::[] | [] -> raise Not_found
+			| head::(hd2::_ as tl) ->
+				sorted := tl ;
 				let catChanged = head.category in
 				addCell leftFreq catChanged (-1) ;
 				addCell rightFreq catChanged 1 ;
 				leftCard := !leftCard - 1 ;
-				((List.hd !sorted).data.(ft) + head.data.(ft)) / 2,
+				(hd2.data.(ft) + head.data.(ft)) / 2,
 					totInfo -. (entropyWithTab leftFreq !leftCard) -.
 						(entropyWithTab rightFreq
 							(trainset.setSize - !leftCard))
-			end
+			)
 		in
 		let rec bestPiv curMax curMaxPiv =
 			(try
@@ -105,10 +104,12 @@ let rec c45 trainset =
 					bestPiv entr piv
 				else bestPiv curMax curMaxPiv
 			with Not_found ->
-				curMaxPiv)
+				curMaxPiv,curMax)
 		in
 
-		bestPiv 0. (-1)
+		let piv,gain = bestPiv 0. (-1) in
+		contGains.(ft) <- gain ;
+		piv
 	in
 	let contThresholds = Array.init (trainset.nbFeatures) findContThreshold in
 
@@ -126,9 +127,14 @@ let rec c45 trainset =
 				(curSplit +. fcountrat *. log2 fcountrat)
 				(v-1)
 		in
-		let wholeEntr = entropy (fun _ -> true) in
-		let loss,spl = gainLoss 0. 0. (trainset.featureMax.(ft)) in
-		(wholeEntr -. loss) /. (-.spl)
+
+		(match trainset.featContinuity.(ft) with
+		| true -> contGains.(ft)
+		| false ->
+			let wholeEntr = entropy (fun _ -> true) in
+			let loss,spl = gainLoss 0. 0. (trainset.featureMax.(ft)) in
+			(wholeEntr -. loss) /. (-.spl)
+		)
 	in
 
 	if trainset.setSize < majorityCasesThreshold then

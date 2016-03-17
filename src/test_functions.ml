@@ -37,7 +37,7 @@ let genRandom () =
         let value = canonVal + rand - uncertainty.(feat) in
         data.(feat) <- value ;
       done ;
-      set := { data = data ; category = cat } :: !set ;
+      set := { data = data ; category = cat - 1 } :: !set ;
     done ;
   done ;
   !set
