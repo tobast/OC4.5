@@ -48,7 +48,6 @@ let majorityVote l =
 	maxarg
 
 let rec c45 trainset =
-	let contThresholds = Array.make (trainset.nbFeatures) 0 in
 	let fsum = List.fold_left (fun cur x -> cur +. x) 0. in
 	let log2 x = (log x) /. (log 2.) in
 
@@ -67,6 +66,51 @@ let rec c45 trainset =
 					x *. (log2 x))
 				(Array.to_list catCount))
 	in
+
+	let findContThreshold ft =
+		let sorted=ref (List.sort
+			(fun tv1 tv2 -> tv1.data.(ft) - tv2.data.(ft)) trainset.set) in
+		let leftCard = ref trainset.setSize in
+		let leftFreq = Array.make (trainset.nbCategories) 0
+		and rightFreq= Array.make (trainset.nbCategories) 0 in
+		List.iter (fun x -> leftFreq.(x.category) <- leftFreq.(x.category)+1)
+			trainset.set;
+		let entropyWithTab tab card =
+			let fcard = float_of_int card in
+			let rat = fun a -> (float_of_int a) /. fcard in
+			Array.fold_left (fun cur a -> cur -. (rat a) *. log2 (rat a)) 0. tab
+		in
+		let totInfo = entropyWithTab leftFreq !leftCard in
+		let addCell tab id v = tab.(id) <- tab.(id) + v in
+		let nextEntropy () =
+			if !sorted = [] ; then
+				raise Not_found
+			else begin
+				let head = List.hd !sorted in
+				sorted := List.tl !sorted;
+				let catChanged = head.category in
+				addCell leftFreq catChanged (-1) ;
+				addCell rightFreq catChanged 1 ;
+				leftCard := !leftCard - 1 ;
+				((List.hd !sorted).data.(ft) + head.data.(ft)) / 2,
+					totInfo -. (entropyWithTab leftFreq !leftCard) -.
+						(entropyWithTab rightFreq
+							(trainset.setSize - !leftCard))
+			end
+		in
+		let rec bestPiv curMax curMaxPiv =
+			(try
+				let piv,entr = nextEntropy () in
+				if entr > curMax then
+					bestPiv entr piv
+				else bestPiv curMax curMaxPiv
+			with Not_found ->
+				curMaxPiv)
+		in
+
+		bestPiv 0. (-1)
+	in
+	let contThresholds = Array.init (trainset.nbFeatures) findContThreshold in
 
 	let featureGainRatio ft =
 		let rec gainLoss curLoss curSplit = function
