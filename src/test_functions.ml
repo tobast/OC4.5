@@ -4,7 +4,7 @@ open Oc45
 
 (* This is a file to test the functions of c45.ml*)
 
-let () = Random.self_init ()
+(* NOTE Warning! Random *MUST* be inited in the calling file. *)
 
 let rec genUnifList nb = function
   | 0 -> []
@@ -46,14 +46,8 @@ let genRandom () =
 
 
 let randTrainSet () = 
-{
-  set = genRandom ();
-  nbFeatures = nbFeatures ;
-  featureMax = featureMax;
-  featContinuity = featContinuity ;
-  nbCategories = nbCategories ;
-  setSize = nbVal * nbCategories;
-}
+	addDataList (genRandom ())
+		(emptyTrainSet nbFeatures nbCategories featContinuity)
 
 let testData n = 
     let data = Array.make nbFeatures 0 in
