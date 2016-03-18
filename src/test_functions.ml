@@ -4,13 +4,15 @@ open Random
 
 (* This is a file to test the functions of c45.ml*)
 
+let () = Random.self_init ()
+
 let rec genUnifList nb = function
   | 0 -> []
   | len -> nb :: (genUnifList nb (len-1))
 
 let nbCategories = 3 
 
-let nbVal = 10 (* for each category *)
+let nbVal = 1000 (* for each category *)
 
 let uncertainty = [|40; 1000; 400; 300; 1000; 400 ; 1000 |]
 
