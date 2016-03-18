@@ -10,21 +10,21 @@ let rec genUnifList nb = function
 
 let nbCategories = 3 
 
-let nbFeatures = 6 
-
 let nbVal = 10 (* for each category *)
 
-let uncertainty = [|40; 1000; 400; 300; 1000; 400|]
+let uncertainty = [|40; 1000; 400; 300; 1000; 400 ; 1000 |]
 
-let featContinuity = [|true; true; true; true; true; true|]
+let featContinuity = [|true; true; true; true; true; true ; true |]
 
-let canonCat1 = [|120; 6083; 3049; 734; 3052; 1363 |]
-and canonCat2 = [|468; 1309; 3209; 590; 4029; 1095 |]
-and canonCat3 = [|58; 4968; 2798; 409; 4672; 1299 |]
+let canonCat1 = [|120; 6083; 3049; 734; 3052; 1363 ; 50|]
+and canonCat2 = [|468; 1309; 3209; 590; 4029; 1095 ; 75 |]
+and canonCat3 = [|58; 4968; 2798; 409; 4672; 1299 ; 35|]
 
 let canon = [|canonCat1; canonCat2; canonCat3|]
 
-let featureMax = [|550; 7500; 4000; 1200; 6000; 2000|]
+let featureMax = [|550; 7500; 4000; 1200; 6000; 2000 ; 1500 |]
+
+let nbFeatures = Array.length uncertainty
 
 let genRandom () = 
   let set = ref [] in
