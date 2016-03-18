@@ -112,8 +112,8 @@ let toDot fmt (tree : decisionTree) =
 		incr cId;
 		Format.fprintf fmt "%d [shape=box,label=\"Feat %d\"]@\n" cellId feat ;
 		let lowId = printTree low and highId = printTree high in
-		Format.fprintf fmt "%d -> %d [label=\"<= %d\"]@\n" cellId lowId thres ;
-		Format.fprintf fmt "%d -> %d [label=\"> %d\"]@\n" cellId highId thres ;
+		Format.fprintf fmt "%d -> %d [label=\"< %d\"]@\n" cellId lowId thres ;
+		Format.fprintf fmt "%d -> %d [label=\">= %d\"]@\n" cellId highId thres;
 		cellId
 	in
 	Format.open_hovbox 4 ;
