@@ -151,6 +151,18 @@ let majorityVote l =
 		if v > cMax then (v,arg) else (cMax,cArg)) counts (-1,-1) in
 	maxarg
 
+(* classify data based on a decision tree *)
+let rec classify tree data = match tree with
+    | DecisionLeaf category -> category
+    | DecisionDiscreteNode (feat, decisionTreeMap) ->
+        classify (DVMap.find data.(feat) decisionTreeMap) data
+    | DecisionContinuousNode (feat, thresh, lowerTree, upperTree) ->
+        if data.(feat) < thresh 
+            then classify lowerTree data
+            else classify upperTree data 
+    
+    
+
 let rec c45 trainset =
 	let fsum = List.fold_left (fun cur x -> cur +. x) 0. in
 	let log2 x = (log x) /. (log 2.) in
