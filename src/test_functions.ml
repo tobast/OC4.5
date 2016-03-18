@@ -55,3 +55,11 @@ let randTrainSet () =
   setSize = nbVal * nbCategories;
 }
 
+let testData n = 
+    let data = Array.make nbFeatures 0 in
+    for feat = 0 to (nbFeatures - 1) do
+        let rand = Random.int (2* uncertainty.(feat)) in
+        data.(feat) <- canon.(n).(feat) + rand - uncertainty.(feat);
+    done ;
+    data 
+        
