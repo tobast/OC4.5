@@ -1,5 +1,6 @@
 open C45
 open Test_functions
+open DataTypes
 
 let tree = c45 (randTrainSet ())
-let () = Format.printf "Done.@."
+let () = DataTypes.toDotStdout tree
