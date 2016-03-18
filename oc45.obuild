@@ -5,8 +5,8 @@ licence: LGPLv3
 obuild-ver: 1
 authors: Théophile Bastian <contact@tobast.fr>, Noémie Fong
 homepage: https://github.com/tobast/OC4.5/
-library OC4.5
-  modules: DataTypes, C45
+library OC45
+  modules: Oc45
   src-dir: src
   build-deps:
 executable randgen

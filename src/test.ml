@@ -1,6 +1,5 @@
-open C45
+open Oc45
 open Test_functions
-open DataTypes
 
 let tree = c45 (randTrainSet ())
-let () = DataTypes.toDotStdout tree
+let () = toDotStdout tree

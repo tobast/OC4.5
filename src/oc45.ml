@@ -20,7 +20,66 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *****************************************************************************)
 
-open DataTypes
+(*********************** DATA TYPES ******************************************)
+type feature = int
+type category = int
+type dataVal = int
+type data = dataVal array
+type trainVal = {
+	data : data ;
+	category : category
+}
+type trainSet = {
+	set : trainVal list ;
+	nbFeatures : int ;
+	featureMax : int array ; (* Max value for the feature a *)
+	featContinuity : bool array ;
+	nbCategories : int ;
+	setSize : int (* number of training values in the training set *)
+}
+
+module DVMap = Map.Make (struct type t = dataVal let compare = compare end)
+
+type decisionTree = DecisionLeaf of category
+	| DecisionDiscreteNode of feature * decisionTree DVMap.t
+	| DecisionContinuousNode of feature * int (* threshold *) *
+			decisionTree (* lower *) * decisionTree (* upper *)
+
+
+let toDot fmt (tree : decisionTree) =
+	let cId = ref 0 in
+	let incr r = r := !r + 1 in
+	let rec printTree = function
+	| DecisionLeaf cat ->
+		Format.fprintf fmt "%d [label=\"Cat. %d\"]@\n" !cId cat;
+		incr cId;
+		!cId - 1
+	| DecisionDiscreteNode(feat,children) ->
+		Format.fprintf fmt "%d [shape=box,label=\"Feat %d\"]@\n" !cId feat;
+		let cellId = !cId in
+		incr cId;
+		DVMap.iter (fun key child ->
+			let ccid = printTree child in
+			Format.fprintf fmt "%d -> %d [label=\"=%d\"]@\n" cellId ccid key)
+			children;
+		cellId
+	| DecisionContinuousNode(feat, thres, low, high) ->
+		let cellId = !cId in
+		incr cId;
+		Format.fprintf fmt "%d [shape=box,label=\"Feat %d\"]@\n" cellId feat ;
+		let lowId = printTree low and highId = printTree high in
+		Format.fprintf fmt "%d -> %d [label=\"<= %d\"]@\n" cellId lowId thres ;
+		Format.fprintf fmt "%d -> %d [label=\"> %d\"]@\n" cellId highId thres ;
+		cellId
+	in
+	Format.open_hovbox 4 ;
+	Format.fprintf fmt "digraph decisionTree {@\n";
+	let _ = printTree tree in
+	Format.close_box () ;
+	Format.fprintf fmt "@\n}@."
+
+let toDotStdout = toDot Format.std_formatter
+(******************* END DATA TYPES ******************************************)
 
 let majorityCasesThreshold = 5
 let epsilonGain = 0.000001
@@ -173,13 +232,11 @@ let rec c45 trainset =
 		else begin
 			let maxGainFeature,maxGain = List.fold_left
 				(fun (i,x) (j,y) ->
-					Format.eprintf "%d:%f " j y ; (*DEBUG*)
 					if y > x then (j,y) else (i,x))
 				(-1,-1.)
 				(List.map (fun i -> i,featureGainRatio i)
 					(0 <|> trainset.nbFeatures))
 				in
-			Format.eprintf "@.";
 
 			if maxGain < epsilonGain then
 				majorityLeaf ()

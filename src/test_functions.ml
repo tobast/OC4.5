@@ -1,5 +1,5 @@
-open DataTypes
 open Random
+open Oc45
 
 
 (* This is a file to test the functions of c45.ml*)
