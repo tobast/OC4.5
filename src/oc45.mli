@@ -63,6 +63,8 @@ type decisionTree
 @param trainSet The training set used, see {!val:emptyTrainSet}. *)
 val c45 : trainSet -> decisionTree
 
+(** Classifies a data vector, given a decision tree. *)
+val classify : decisionTree -> data -> category
 
 (** {6 Training set manipulation} *)
 
@@ -79,6 +81,12 @@ val emptyTrainSet : int -> int -> bool array -> trainSet
 
 (** Adds the given value to the training set. *)
 val addData : trainVal -> trainSet -> trainSet
+
+(** Adds a list of data vectors to the given training set. *)
+val addDataList : trainVal list -> trainSet -> trainSet
+
+(** Extracts the data vector list from a training set. *)
+val getSet : trainSet -> trainVal list
 
 (** [setFeatureMax feat maxVal trainSet] sets the maximum value the
 {e discrete} feature [feat] may take. A discrete value is represented by

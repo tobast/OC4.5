@@ -71,6 +71,10 @@ let addData trainVal trainSet =
     setSize = trainSet.setSize + 1
     }
 
+let rec addDataList trainList trainSet = match trainList with
+| [] -> trainSet
+| hd::tl -> addDataList tl (addData hd trainSet)
+
 let setFeatureMax feat maxVal trainSet =
     trainSet.featureMax.(feat) <- maxVal
 
