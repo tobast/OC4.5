@@ -45,7 +45,51 @@ type decisionTree = DecisionLeaf of category
 	| DecisionContinuousNode of feature * int (* threshold *) *
 			decisionTree (* lower *) * decisionTree (* upper *)
 
+(* Note that featureMax will be inferred *)
+let emptyTrainSet nbFeatures nbCategories featContinuity  = 
+    {set = [] ;
+    nbFeatures = nbFeatures ;
+    featureMax = Array.make nbFeatures 0 ;
+    featContinuity = featContinuity ;
+    nbCategories = nbCategories ;
+    setSize = 0
+    }
+    
+let addData trainVal trainSet =
+    for feat = 0 to (trainSet.nbFeatures - 1) do
+        trainSet.featureMax.(feat) <- max trainSet.featureMax.(feat) trainVal.data.(feat)
+    done;
+    {set = trainVal :: trainSet.set ;
+    nbFeatures = trainSet.nbFeatures ;
+    featureMax = trainSet.featureMax ;
+    featContinuity = trainSet.featContinuity ;
+    nbCategories = trainSet.nbCategories ;
+    setSize = trainSet.setSize + 1
+    }
 
+let setFeatureMax feat maxVal trainSet =
+    trainSet.featureMax.(feat) <- maxVal
+
+(* get functions *)
+let getSet trainSet =
+    trainSet.set
+
+let getNbFeatures trainSet = 
+    trainSet.nbFeatures 
+
+let getFeatureMax trainSet =
+    trainSet.featureMax
+
+let getFeatContinuity trainSet =
+    trainSet.featContinuity
+
+let getNbCategories trainSet =
+    trainSet.nbCategories 
+
+let getSetSize trainSet =
+    trainSet.setSize 
+
+(* graph generation *)
 let toDot fmt (tree : decisionTree) =
 	let cId = ref 0 in
 	let incr r = r := !r + 1 in
