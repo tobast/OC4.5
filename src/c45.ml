@@ -23,6 +23,7 @@
 open DataTypes
 
 let majorityCasesThreshold = 5
+let epsilonGain = 0.000001
 
 let (<|>) a b =
 	(** a|b : generates the list [a ; a+1 ; ... ; b-1] *)
@@ -80,7 +81,7 @@ let rec c45 trainset =
 			let fcard = float_of_int card in
 			let rat = fun a -> (float_of_int a) /. fcard in
 			Array.fold_left (fun cur a -> (match a with
-				| 0 -> 0.
+				| 0 -> cur
 				| a -> cur -. (rat a) *. log2 (rat a))) 0. tab
 		in
 		let totInfo = entropyWithTab leftFreq !leftCard in
@@ -151,11 +152,15 @@ let rec c45 trainset =
 		)
 	in
 
-	if trainset.setSize < majorityCasesThreshold then
-		(* #trainset < threshold => insert the majority vote leaf.
-			In case there is no majority, the result is an abritrary choice. *)
+	let majorityLeaf () =
+		(* In case there is no majority, the result is an abritrary choice. *)
 		DecisionLeaf(majorityVote (List.map
 			(fun tv -> tv.category) trainset.set))
+	in
+
+	if trainset.setSize < majorityCasesThreshold then
+		(* #trainset < threshold => insert the majority vote leaf. *)
+		majorityLeaf ()
 	else begin
 		let commonClass = List.fold_left
 			(fun cur x -> if x.category = cur then cur else -1)
@@ -167,15 +172,18 @@ let rec c45 trainset =
 			DecisionLeaf(commonClass)
 		else begin
 			let maxGainFeature,maxGain = List.fold_left
-				(fun (i,x) (j,y) -> Format.eprintf "%d:%f " j y ; if y > x then (j,y) else (i,x))
+				(fun (i,x) (j,y) ->
+					Format.eprintf "%d:%f " j y ; (*DEBUG*)
+					if y > x then (j,y) else (i,x))
 				(-1,-1.)
 				(List.map (fun i -> i,featureGainRatio i)
 					(0 <|> trainset.nbFeatures))
 				in
-
 			Format.eprintf "@.";
 
-			if trainset.featContinuity.(maxGainFeature) then begin
+			if maxGain < epsilonGain then
+				majorityLeaf ()
+			else if trainset.featContinuity.(maxGainFeature) then begin
 				let threshold = contThresholds.(maxGainFeature) in
 				let emptyset = { trainset with set = [] ; setSize = 0 } in
 				let lower, upper = List.fold_left (fun (lset,uset) tv ->
@@ -187,7 +195,7 @@ let rec c45 trainset =
 						lset, {uset with
 							set = tv::uset.set ;
 							setSize = uset.setSize+1 }
-					) (emptyset,emptyset) emptyset.set in
+					) (emptyset,emptyset) trainset.set in
 				DecisionContinuousNode
 					(maxGainFeature, threshold, c45 lower, c45 upper)
 			end else begin
