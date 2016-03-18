@@ -21,6 +21,8 @@
  *****************************************************************************)
 
 (*********************** DATA TYPES ******************************************)
+exception InvalidArgument of string
+
 type feature = int
 type category = int
 type dataVal = int
@@ -47,6 +49,8 @@ type decisionTree = DecisionLeaf of category
 
 (* Note that featureMax will be inferred *)
 let emptyTrainSet nbFeatures nbCategories featContinuity  = 
+	if nbFeatures <> (Array.length featContinuity) then
+		raise (InvalidArgument "featContinuity must have length nbFeatures.");
     {set = [] ;
     nbFeatures = nbFeatures ;
     featureMax = Array.make nbFeatures 0 ;

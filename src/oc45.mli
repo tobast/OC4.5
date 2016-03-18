@@ -24,6 +24,8 @@ shame, it's clearly TODO. *)
 
 (** {6 Data types } *)
 
+exception InvalidArgument of string
+
 (** A feature id. *)
 type feature = int
 
@@ -68,7 +70,11 @@ val c45 : trainSet -> decisionTree
 train set with [nbFeatures] features and [nbCategories] categories. The array
 [featContinuity] must have [nbFeatures] elements, with a [true] value if
 the corresponding feature is continuous (that is, may take any value) or
-[false] if the feature is discrete in a restrained set (eg., "Yes"/"No").*)
+[false] if the feature is discrete in a restrained set (eg., "Yes"/"No").
+
+Raises {!exception:InvalidArgument} if [featContinuity] has not a length
+of [nbFeatures]
+*)
 val emptyTrainSet : int -> int -> bool array -> trainSet
 
 (** Adds the given value to the training set. *)
