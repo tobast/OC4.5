@@ -79,11 +79,24 @@ let rec c45 trainset =
 		let entropyWithTab tab card =
 			let fcard = float_of_int card in
 			let rat = fun a -> (float_of_int a) /. fcard in
-			Array.fold_left (fun cur a -> cur -. (rat a) *. log2 (rat a)) 0. tab
+			Array.fold_left (fun cur a -> (match a with
+				| 0 -> 0.
+				| a -> cur -. (rat a) *. log2 (rat a))) 0. tab
 		in
 		let totInfo = entropyWithTab leftFreq !leftCard in
 		let addCell tab id v = tab.(id) <- tab.(id) + v in
-		let nextEntropy () = (match !sorted with
+		let splitVal card =
+			let oneSide c = (match c with
+			| 0 -> 0.
+			| c ->
+				let fcard = float_of_int c in
+				let rat = fcard /. (float_of_int trainset.setSize) in
+				-. (rat *. (log2 rat))
+			) in
+			(oneSide card) +. (oneSide (trainset.setSize - card))
+		in
+
+		let nextInfoGain () = (match !sorted with
 			| _::[] | [] -> raise Not_found
 			| head::(hd2::_ as tl) ->
 				sorted := tl ;
@@ -91,15 +104,16 @@ let rec c45 trainset =
 				addCell leftFreq catChanged (-1) ;
 				addCell rightFreq catChanged 1 ;
 				leftCard := !leftCard - 1 ;
+				let gain = totInfo -. (entropyWithTab leftFreq !leftCard) -.
+					(entropyWithTab rightFreq
+							(trainset.setSize - !leftCard)) in
 				(hd2.data.(ft) + head.data.(ft)) / 2,
-					totInfo -. (entropyWithTab leftFreq !leftCard) -.
-						(entropyWithTab rightFreq
-							(trainset.setSize - !leftCard))
+					gain /. (splitVal !leftCard)
 			)
 		in
 		let rec bestPiv curMax curMaxPiv =
 			(try
-				let piv,entr = nextEntropy () in
+				let piv,entr = nextInfoGain () in
 				if entr > curMax then
 					bestPiv entr piv
 				else bestPiv curMax curMaxPiv
@@ -153,11 +167,13 @@ let rec c45 trainset =
 			DecisionLeaf(commonClass)
 		else begin
 			let maxGainFeature,maxGain = List.fold_left
-				(fun (i,x) (j,y) -> if y > x then (j,y) else (i,x))
+				(fun (i,x) (j,y) -> Format.eprintf "%d:%f " j y ; if y > x then (j,y) else (i,x))
 				(-1,-1.)
 				(List.map (fun i -> i,featureGainRatio i)
 					(0 <|> trainset.nbFeatures))
 				in
+
+			Format.eprintf "@.";
 
 			if trainset.featContinuity.(maxGainFeature) then begin
 				let threshold = contThresholds.(maxGainFeature) in
