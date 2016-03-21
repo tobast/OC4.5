@@ -61,7 +61,8 @@ let emptyTrainSet nbFeatures nbCategories featContinuity  =
     
 let addData trainVal trainSet =
     for feat = 0 to (trainSet.nbFeatures - 1) do
-        trainSet.featureMax.(feat) <- max trainSet.featureMax.(feat) trainVal.data.(feat)
+        trainSet.featureMax.(feat) <-
+			max trainSet.featureMax.(feat) trainVal.data.(feat)
     done;
     {set = trainVal :: trainSet.set ;
     nbFeatures = trainSet.nbFeatures ;
@@ -135,7 +136,7 @@ let toDotStdout = toDot Format.std_formatter
 
 let majorityCasesThreshold = 5
 let epsilonGain = 0.000001
-
+	
 let (<|>) a b =
 	(** a|b : generates the list [a ; a+1 ; ... ; b-1] *)
 	let rec span b cur =
@@ -220,7 +221,13 @@ let rec c45 trainset =
 			(oneSide card) +. (oneSide (trainset.setSize - card))
 		in
 
-		let nextInfoGain () = (match !sorted with
+		let div2down (a:int) =
+			(** [div2down a] returns a/2 rounded towards -infty
+				(the default behavior is to round towards 0). *)
+			a asr 1
+		in
+
+		let rec nextInfoGain () = (match !sorted with
 			| _::[] | [] -> raise Not_found
 			| head::(hd2::_ as tl) ->
 				sorted := tl ;
@@ -228,11 +235,19 @@ let rec c45 trainset =
 				addCell leftFreq catChanged (-1) ;
 				addCell rightFreq catChanged 1 ;
 				leftCard := !leftCard - 1 ;
-				let gain = totInfo -. (entropyWithTab leftFreq !leftCard) -.
-					(entropyWithTab rightFreq
-							(trainset.setSize - !leftCard)) in
-				(hd2.data.(ft) + head.data.(ft)) / 2,
-					gain /. (splitVal !leftCard)
+				
+				if head.data.(ft) = hd2.data.(ft) then
+					nextInfoGain ()
+				else begin
+					let gain = totInfo -. (entropyWithTab leftFreq !leftCard)-.
+						(entropyWithTab rightFreq
+								(trainset.setSize - !leftCard)) in
+					let gainRat = gain /. (splitVal !leftCard) in
+
+					(* We can't use /2: see the NOTE on <= vs < below *)
+					div2down (hd2.data.(ft) + head.data.(ft)),
+						gainRat
+				end
 			)
 		in
 		let rec bestPiv curMax curMaxPiv =
@@ -296,11 +311,15 @@ let rec c45 trainset =
 		else begin
 			let maxGainFeature,maxGain = List.fold_left
 				(fun (i,x) (j,y) ->
+					(*Format.eprintf "%f " y ; (*DEBUG*) *)
 					if y > x then (j,y) else (i,x))
 				(-1,-1.)
 				(List.map (fun i -> i,featureGainRatio i)
 					(0 <|> trainset.nbFeatures))
 				in
+			(*Format.eprintf " -- sel. %d - %f, split %d ; %d elts@."
+				maxGainFeature maxGain (contThresholds.(maxGainFeature))
+				(getSetSize trainset); (*DEBUG*) *)
 
 			if maxGain < epsilonGain then
 				majorityLeaf ()
@@ -308,7 +327,13 @@ let rec c45 trainset =
 				let threshold = contThresholds.(maxGainFeature) in
 				let emptyset = { trainset with set = [] ; setSize = 0 } in
 				let lower, upper = List.fold_left (fun (lset,uset) tv ->
-					if tv.data.(maxGainFeature) < threshold then
+					if tv.data.(maxGainFeature) <= threshold then
+						(* NOTE Here it is important to keep <= and not <
+						Indeed when determining an integer threshold, we
+						use (val1+val2)/2, which rounds down to val1 if
+						val2 = val1+1 (and yes, we *do* handle the
+						negative values case, rounded towards 0).
+						If we use <, the generation could hang forever. *)
 						{ lset with
 							set = tv::lset.set ;
 							setSize = lset.setSize+1 }, uset
