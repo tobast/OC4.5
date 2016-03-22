@@ -23,340 +23,422 @@
 (*********************** DATA TYPES ******************************************)
 exception InvalidArgument of string
 
-type feature = int
-type category = int
-type dataVal = int
-type data = dataVal array
-type trainVal = {
-	data : data ;
-	category : category
-}
-type trainSet = {
-	set : trainVal list ;
-	nbFeatures : int ;
-	featureMax : int array ; (* Max value for the feature a *)
-	featContinuity : bool array ;
-	nbCategories : int ;
-	setSize : int (* number of training values in the training set *)
-}
+module type Comparable = sig
+	type t
+	val compare : t -> t -> int
+	val avg : t -> t -> t
+end
 
-module DVMap = Map.Make (struct type t = dataVal let compare = compare end)
+module type S = sig
+	exception InvalidArgument of string
+	type feature = int
+	exception BadContinuity of feature
+	type category = int
+	type contData
+	type dataVal = Discrete of int | Continuous of contData
+	type data = dataVal array
+	type trainVal = {
+		data : data ;
+		category : category
+	}
+	type trainSet
 
-type decisionTree = DecisionLeaf of category
-	| DecisionDiscreteNode of feature * decisionTree DVMap.t
-	| DecisionContinuousNode of feature * int (* threshold *) *
-			decisionTree (* lower *) * decisionTree (* upper *)
+	type decisionTree
+	val c45 : trainSet -> decisionTree
+	val classify : decisionTree -> data -> category
+	val emptyTrainSet : int -> int -> bool array -> trainSet
+	val addData : trainVal -> trainSet -> trainSet
+	val addDataList : trainVal list -> trainSet -> trainSet
+	val getSet : trainSet -> trainVal list
+	val setFeatureMax : int -> int -> trainSet -> unit
+	val getNbFeatures : trainSet -> int
+	val getFeatureMax : trainSet -> int array
+	val getFeatContinuity : trainSet -> bool array
+	val getNbCategories : trainSet -> int
+	val getSetSize : trainSet -> int
+	val toDot : Format.formatter -> (Format.formatter -> contData -> unit)
+		-> decisionTree -> unit
+	val toDotStdout : (Format.formatter -> contData -> unit) -> decisionTree
+		-> unit
+end
 
-(* Note that featureMax will be inferred *)
-let emptyTrainSet nbFeatures nbCategories featContinuity  = 
-	if nbFeatures <> (Array.length featContinuity) then
-		raise (InvalidArgument "featContinuity must have length nbFeatures.");
-    {set = [] ;
-    nbFeatures = nbFeatures ;
-    featureMax = Array.make nbFeatures 0 ;
-    featContinuity = featContinuity ;
-    nbCategories = nbCategories ;
-    setSize = 0
-    }
-    
-let addData trainVal trainSet =
-    for feat = 0 to (trainSet.nbFeatures - 1) do
-        trainSet.featureMax.(feat) <-
-			max trainSet.featureMax.(feat) trainVal.data.(feat)
-    done;
-    {set = trainVal :: trainSet.set ;
-    nbFeatures = trainSet.nbFeatures ;
-    featureMax = trainSet.featureMax ;
-    featContinuity = trainSet.featContinuity ;
-    nbCategories = trainSet.nbCategories ;
-    setSize = trainSet.setSize + 1
-    }
+module Make(X: Comparable) = struct
+	exception InvalidArgument of string
+	type feature = int
+	exception BadContinuity of feature
+	type category = int
+	type contData = X.t
+	type dataVal = Discrete of int | Continuous of contData
+	type data = dataVal array
+	type trainVal = {
+		data : data ;
+		category : category
+	}
+	type trainSet = {
+		set : trainVal list ;
+		nbFeatures : int ;
+		featureMax : int array; (* Max value for the discrete feature a *)
+		featContinuity : bool array ;
+		nbCategories : int ;
+		setSize : int (* number of training values in the training set *)
+	}
+	module DVMap = Map.Make (struct type t = dataVal let compare = compare end)
 
-let rec addDataList trainList trainSet = match trainList with
-| [] -> trainSet
-| hd::tl -> addDataList tl (addData hd trainSet)
+	type decisionTree = DecisionLeaf of category
+		| DecisionDiscreteNode of feature * decisionTree DVMap.t
+		| DecisionContinuousNode of feature * contData (* threshold *) *
+				decisionTree (* lower *) * decisionTree (* upper *)
 
-let setFeatureMax feat maxVal trainSet =
-    trainSet.featureMax.(feat) <- maxVal
+	(* Note that featureMax will be inferred *)
+	let emptyTrainSet nbFeatures nbCategories featContinuity  = 
+		if nbFeatures <> (Array.length featContinuity) then
+			raise (InvalidArgument ("featContinuity must have length"^
+					" nbFeatures."));
+		{set = [] ;
+		nbFeatures = nbFeatures ;
+		featureMax = Array.make nbFeatures 0 ;
+		featContinuity = featContinuity ;
+		nbCategories = nbCategories ;
+		setSize = 0
+		}
+		
+	let addData trainVal trainSet =
+		for feat = 0 to (trainSet.nbFeatures - 1) do
+			(match trainSet.featContinuity.(feat), trainVal.data.(feat)  with
+			| true, Discrete(_) | false, Continuous(_) ->
+				raise (BadContinuity feat)
+			| true, Continuous(_) -> ()
+			| false,Discrete(v) ->
+				trainSet.featureMax.(feat) <-
+					max trainSet.featureMax.(feat) v
+			)
+		done;
+		{set = trainVal :: trainSet.set ;
+		nbFeatures = trainSet.nbFeatures ;
+		featureMax = trainSet.featureMax ;
+		featContinuity = trainSet.featContinuity ;
+		nbCategories = trainSet.nbCategories ;
+		setSize = trainSet.setSize + 1
+		}
 
-(* get functions *)
-let getSet trainSet =
-    trainSet.set
+	let rec addDataList trainList trainSet = match trainList with
+	| [] -> trainSet
+	| hd::tl -> addDataList tl (addData hd trainSet)
 
-let getNbFeatures trainSet = 
-    trainSet.nbFeatures 
+	let setFeatureMax feat maxVal trainSet =
+		trainSet.featureMax.(feat) <- maxVal
 
-let getFeatureMax trainSet =
-    trainSet.featureMax
+	(* get functions *)
+	let getSet trainSet =
+		trainSet.set
 
-let getFeatContinuity trainSet =
-    trainSet.featContinuity
+	let getNbFeatures trainSet = 
+		trainSet.nbFeatures 
 
-let getNbCategories trainSet =
-    trainSet.nbCategories 
+	let getFeatureMax trainSet =
+		trainSet.featureMax
 
-let getSetSize trainSet =
-    trainSet.setSize 
+	let getFeatContinuity trainSet =
+		trainSet.featContinuity
 
-(* graph generation *)
-let toDot fmt (tree : decisionTree) =
-	let cId = ref 0 in
-	let incr r = r := !r + 1 in
-	let rec printTree = function
-	| DecisionLeaf cat ->
-		Format.fprintf fmt "%d [label=\"Cat. %d\"]@\n" !cId cat;
-		incr cId;
-		!cId - 1
-	| DecisionDiscreteNode(feat,children) ->
-		Format.fprintf fmt "%d [shape=box,label=\"Feat %d\"]@\n" !cId feat;
-		let cellId = !cId in
-		incr cId;
-		DVMap.iter (fun key child ->
-			let ccid = printTree child in
-			Format.fprintf fmt "%d -> %d [label=\"=%d\"]@\n" cellId ccid key)
-			children;
-		cellId
-	| DecisionContinuousNode(feat, thres, low, high) ->
-		let cellId = !cId in
-		incr cId;
-		Format.fprintf fmt "%d [shape=box,label=\"Feat %d\"]@\n" cellId feat ;
-		let lowId = printTree low and highId = printTree high in
-		Format.fprintf fmt "%d -> %d [label=\"< %d\"]@\n" cellId lowId thres ;
-		Format.fprintf fmt "%d -> %d [label=\">= %d\"]@\n" cellId highId thres;
-		cellId
-	in
-	Format.open_hovbox 4 ;
-	Format.fprintf fmt "digraph decisionTree {@\n";
-	let _ = printTree tree in
-	Format.close_box () ;
-	Format.fprintf fmt "@\n}@."
+	let getNbCategories trainSet =
+		trainSet.nbCategories 
 
-let toDotStdout = toDot Format.std_formatter
-(******************* END DATA TYPES ******************************************)
+	let getSetSize trainSet =
+		trainSet.setSize 
 
-let majorityCasesThreshold = 5
-let epsilonGain = 0.000001
-	
-let (<|>) a b =
-	(** a|b : generates the list [a ; a+1 ; ... ; b-1] *)
-	let rec span b cur =
-		if a = b then a::cur
-			else span (b-1) (b::cur)
-	in span (b-1) []
-let bxor a b = match a,b with
-| true,true | false,false -> false
-| _,_ -> true
-
-module IMap = Map.Make(struct type t=int let compare = compare end)
-
-let majorityVote l =
-	(** Returns the most present value in l. If the maximum is not unique,
-		returns an arbitrary value among the possible ones. *)
-	let counts = List.fold_left
-		(fun map x -> IMap.add x
-			((try IMap.find x map with Not_found -> 0) + 1) map)
-		IMap.empty l in
-	let _,maxarg = IMap.fold (fun arg v (cMax,cArg) ->
-		if v > cMax then (v,arg) else (cMax,cArg)) counts (-1,-1) in
-	maxarg
-
-(* classify data based on a decision tree *)
-let rec classify tree data = match tree with
-    | DecisionLeaf category -> category
-    | DecisionDiscreteNode (feat, decisionTreeMap) ->
-        classify (DVMap.find data.(feat) decisionTreeMap) data
-    | DecisionContinuousNode (feat, thresh, lowerTree, upperTree) ->
-        if data.(feat) < thresh 
-            then classify lowerTree data
-            else classify upperTree data 
-    
-    
-
-let rec c45 trainset =
-	let fsum = List.fold_left (fun cur x -> cur +. x) 0. in
-	let log2 x = (log x) /. (log 2.) in
-
-	let countFilter filter = List.fold_left
-		(fun cur x -> if filter x then (cur+1) else cur) 0 in
-
-	let entropy filter =
-		let catCount = Array.make (trainset.nbCategories) 0 in
-		let nbTrainVal = ref 0 in
-		List.iter (fun tv -> if filter tv then begin
-			nbTrainVal := !nbTrainVal + 1 ;
-			catCount.(tv.category) <- catCount.(tv.category) + 1 end)
-			trainset.set ;
-		-1. *. fsum (List.map (fun k ->
-					let x = (float_of_int k) /. (float_of_int !nbTrainVal) in
-					x *. (log2 x))
-				(Array.to_list catCount))
-	in
-
-	let contGains = Array.make (trainset.nbFeatures) 0. in
-	let findContThreshold ft =
-		let sorted=ref (List.sort
-			(fun tv1 tv2 -> tv1.data.(ft) - tv2.data.(ft)) trainset.set) in
-		let leftCard = ref trainset.setSize in
-		let leftFreq = Array.make (trainset.nbCategories) 0
-		and rightFreq= Array.make (trainset.nbCategories) 0 in
-		List.iter (fun x -> leftFreq.(x.category) <- leftFreq.(x.category)+1)
-			trainset.set;
-		let entropyWithTab tab card =
-			let fcard = float_of_int card in
-			let rat = fun a -> (float_of_int a) /. fcard in
-			Array.fold_left (fun cur a -> (match a with
-				| 0 -> cur
-				| a -> cur -. (rat a) *. log2 (rat a))) 0. tab
-		in
-		let totInfo = entropyWithTab leftFreq !leftCard in
-		let addCell tab id v = tab.(id) <- tab.(id) + v in
-		let splitVal card =
-			let oneSide c = (match c with
-			| 0 -> 0.
-			| c ->
-				let fcard = float_of_int c in
-				let rat = fcard /. (float_of_int trainset.setSize) in
-				-. (rat *. (log2 rat))
-			) in
-			(oneSide card) +. (oneSide (trainset.setSize - card))
+	(* graph generation *)
+	let toDot fmt contPPrint (tree : decisionTree) =
+		let prettyPrintData fmt = function
+		| Continuous(x) -> Format.fprintf fmt "%a" contPPrint x
+		| Discrete(x) -> Format.fprintf fmt "%d" x
 		in
 
-		let div2down (a:int) =
-			(** [div2down a] returns a/2 rounded towards -infty
-				(the default behavior is to round towards 0). *)
-			a asr 1
+		let cId = ref 0 in
+		let incr r = r := !r + 1 in
+		let rec printTree = function
+		| DecisionLeaf cat ->
+			Format.fprintf fmt "%d [label=\"Cat. %d\"]@\n" !cId cat;
+			incr cId;
+			!cId - 1
+		| DecisionDiscreteNode(feat,children) ->
+			Format.fprintf fmt "%d [shape=box,label=\"Feat %d\"]@\n" !cId feat;
+			let cellId = !cId in
+			incr cId;
+			DVMap.iter (fun key child ->
+				let ccid = printTree child in
+				Format.fprintf fmt "%d -> %d [label=\"=%a\"]@\n"
+					cellId ccid prettyPrintData key)
+				children;
+			cellId
+		| DecisionContinuousNode(feat, thres, low, high) ->
+			let cellId = !cId in
+			incr cId;
+			Format.fprintf fmt "%d [shape=box,label=\"Feat %d\"]@\n"
+				cellId feat ;
+			let lowId = printTree low and highId = printTree high in
+			Format.fprintf fmt "%d -> %d [label=\"< %a\"]@\n"
+				cellId lowId contPPrint thres ;
+			Format.fprintf fmt "%d -> %d [label=\">= %a\"]@\n"
+				cellId highId contPPrint thres;
+			cellId
+		in
+		Format.open_hovbox 4 ;
+		Format.fprintf fmt "digraph decisionTree {@\n";
+		let _ = printTree tree in
+		Format.close_box () ;
+		Format.fprintf fmt "@\n}@."
+
+	let toDotStdout = toDot Format.std_formatter
+	(******************* END DATA TYPES *************************************)
+
+	let majorityCasesThreshold = 5
+	let epsilonGain = 0.000001
+		
+	let (<|>) a b =
+		(** a|b : generates the list [a ; a+1 ; ... ; b-1] *)
+		let rec span b cur =
+			if a = b then a::cur
+				else span (b-1) (b::cur)
+		in span (b-1) []
+	let bxor a b = match a,b with
+	| true,true | false,false -> false
+	| _,_ -> true
+
+	module IMap = Map.Make(struct type t=int let compare = compare end)
+
+	let majorityVote l =
+		(** Returns the most present value in l. If the maximum is not unique,
+			returns an arbitrary value among the possible ones. *)
+		let counts = List.fold_left
+			(fun map x -> IMap.add x
+				((try IMap.find x map with Not_found -> 0) + 1) map)
+			IMap.empty l in
+		let _,maxarg = IMap.fold (fun arg v (cMax,cArg) ->
+			if v > cMax then (v,arg) else (cMax,cArg)) counts (-1,-1) in
+		maxarg
+
+	(* classify data based on a decision tree *)
+	let rec classify tree data = match tree with
+		| DecisionLeaf category -> category
+		| DecisionDiscreteNode (feat, decisionTreeMap) ->
+			classify (DVMap.find data.(feat) decisionTreeMap) data
+		| DecisionContinuousNode (feat, thresh, lowerTree, upperTree) ->
+			(match data.(feat) with
+			| Discrete(_) -> raise (BadContinuity feat)
+			| Continuous(x) ->
+				if x < thresh 
+					then classify lowerTree data
+					else classify upperTree data 
+			)
+		
+
+	let rec c45 trainset =
+		let fsum = List.fold_left (fun cur x -> cur +. x) 0. in
+		let log2 x = (log x) /. (log 2.) in
+
+		let countFilter filter = List.fold_left
+			(fun cur x -> if filter x then (cur+1) else cur) 0 in
+
+		let entropy filter =
+			let catCount = Array.make (trainset.nbCategories) 0 in
+			let nbTrainVal = ref 0 in
+			List.iter (fun tv -> if filter tv then begin
+				nbTrainVal := !nbTrainVal + 1 ;
+				catCount.(tv.category) <- catCount.(tv.category) + 1 end)
+				trainset.set ;
+			-1. *. fsum (List.map (fun k ->
+						let x = (float_of_int k) /.
+							(float_of_int !nbTrainVal) in
+						x *. (log2 x))
+					(Array.to_list catCount))
 		in
 
-		let rec nextInfoGain () = (match !sorted with
-			| _::[] | [] -> raise Not_found
-			| head::(hd2::_ as tl) ->
-				sorted := tl ;
-				let catChanged = head.category in
-				addCell leftFreq catChanged (-1) ;
-				addCell rightFreq catChanged 1 ;
-				leftCard := !leftCard - 1 ;
-				
-				if head.data.(ft) = hd2.data.(ft) then
-					nextInfoGain ()
-				else begin
-					let gain = totInfo -. (entropyWithTab leftFreq !leftCard)-.
-						(entropyWithTab rightFreq
-								(trainset.setSize - !leftCard)) in
-					let gainRat = gain /. (splitVal !leftCard) in
+		let contGains = Array.make (trainset.nbFeatures) 0. in
+		let findContThreshold ft =
+			let contVal ft = function
+			| Discrete(_) -> raise (BadContinuity ft)
+			| Continuous(x) -> x
+			in
 
-					(* We can't use /2: see the NOTE on <= vs < below *)
-					div2down (hd2.data.(ft) + head.data.(ft)),
-						gainRat
-				end
+			let sorted=ref (List.sort
+				(fun tv1 tv2 -> compare (contVal ft tv1.data.(ft))
+					(contVal ft tv2.data.(ft))) trainset.set) in
+			let leftCard = ref trainset.setSize in
+			let leftFreq = Array.make (trainset.nbCategories) 0
+			and rightFreq= Array.make (trainset.nbCategories) 0 in
+			List.iter (fun x -> leftFreq.(x.category) <-
+					leftFreq.(x.category)+1)
+				trainset.set;
+			let entropyWithTab tab card =
+				let fcard = float_of_int card in
+				let rat = fun a -> (float_of_int a) /. fcard in
+				Array.fold_left (fun cur a -> (match a with
+					| 0 -> cur
+					| a -> cur -. (rat a) *. log2 (rat a))) 0. tab
+			in
+			let totInfo = entropyWithTab leftFreq !leftCard in
+			let addCell tab id v = tab.(id) <- tab.(id) + v in
+			let splitVal card =
+				let oneSide c = (match c with
+				| 0 -> 0.
+				| c ->
+					let fcard = float_of_int c in
+					let rat = fcard /. (float_of_int trainset.setSize) in
+					-. (rat *. (log2 rat))
+				) in
+				(oneSide card) +. (oneSide (trainset.setSize - card))
+			in
+
+			let rec nextInfoGain () = (match !sorted with
+				| _::[] | [] -> raise Not_found
+				| head::(hd2::_ as tl) ->
+					sorted := tl ;
+					let catChanged = head.category in
+					addCell leftFreq catChanged (-1) ;
+					addCell rightFreq catChanged 1 ;
+					leftCard := !leftCard - 1 ;
+					
+					if head.data.(ft) = hd2.data.(ft) then
+						nextInfoGain ()
+					else begin
+						let gain = totInfo -.
+							(entropyWithTab leftFreq !leftCard)-.
+							(entropyWithTab rightFreq
+									(trainset.setSize - !leftCard)) in
+						let gainRat = gain /. (splitVal !leftCard) in
+
+						X.avg (contVal ft hd2.data.(ft))
+							(contVal ft head.data.(ft)),
+							gainRat
+					end
+				)
+			in
+			let rec bestPiv curMax curMaxPiv =
+				(try
+					let piv,entr = nextInfoGain () in
+					if entr > curMax then
+						bestPiv entr piv
+					else bestPiv curMax curMaxPiv
+				with Not_found ->
+					curMaxPiv,curMax)
+			in
+
+			(try
+				let origPiv,origEntr = nextInfoGain () in
+				let piv,gain = bestPiv origEntr origPiv in
+				contGains.(ft) <- gain ;
+				piv
+			with Not_found ->
+				raise (InvalidArgument "Empty data set."))
+		in
+		let contThresholds = Array.init (trainset.nbFeatures)
+			findContThreshold in
+
+		let featureGainRatio ft =
+			let rec gainLoss curLoss curSplit = function
+			| -1 -> curLoss,curSplit
+			| v ->
+				let filter = (fun tv -> tv.data.(ft) = (Discrete v)) in
+				let count = countFilter filter trainset.set in
+				let fcountrat = (float_of_int count) /.
+					(float_of_int trainset.setSize) in
+				let entr = entropy filter in
+				gainLoss
+					(curLoss +. fcountrat *. entr)
+					(curSplit +. fcountrat *. log2 fcountrat)
+					(v-1)
+			in
+
+			(match trainset.featContinuity.(ft) with
+			| true -> contGains.(ft)
+			| false ->
+				let wholeEntr = entropy (fun _ -> true) in
+				let loss,spl = gainLoss 0. 0. (trainset.featureMax.(ft)) in
+				(wholeEntr -. loss) /. (-.spl)
 			)
 		in
-		let rec bestPiv curMax curMaxPiv =
-			(try
-				let piv,entr = nextInfoGain () in
-				if entr > curMax then
-					bestPiv entr piv
-				else bestPiv curMax curMaxPiv
-			with Not_found ->
-				curMaxPiv,curMax)
+
+		let majorityLeaf () =
+			(* In case there is no majority, the result is an
+			abritrary choice. *)
+			DecisionLeaf(majorityVote (List.map
+				(fun tv -> tv.category) trainset.set))
 		in
 
-		let piv,gain = bestPiv 0. (-1) in
-		contGains.(ft) <- gain ;
-		piv
-	in
-	let contThresholds = Array.init (trainset.nbFeatures) findContThreshold in
-
-	let featureGainRatio ft =
-		let rec gainLoss curLoss curSplit = function
-		| -1 -> curLoss,curSplit
-		| v ->
-			let filter = (fun tv -> tv.data.(ft) = v) in
-			let count = countFilter filter trainset.set in
-			let fcountrat = (float_of_int count) /.
-				(float_of_int trainset.setSize) in
-			let entr = entropy filter in
-			gainLoss
-				(curLoss +. fcountrat *. entr)
-				(curSplit +. fcountrat *. log2 fcountrat)
-				(v-1)
-		in
-
-		(match trainset.featContinuity.(ft) with
-		| true -> contGains.(ft)
-		| false ->
-			let wholeEntr = entropy (fun _ -> true) in
-			let loss,spl = gainLoss 0. 0. (trainset.featureMax.(ft)) in
-			(wholeEntr -. loss) /. (-.spl)
-		)
-	in
-
-	let majorityLeaf () =
-		(* In case there is no majority, the result is an abritrary choice. *)
-		DecisionLeaf(majorityVote (List.map
-			(fun tv -> tv.category) trainset.set))
-	in
-
-	if trainset.setSize < majorityCasesThreshold then
-		(* #trainset < threshold => insert the majority vote leaf. *)
-		majorityLeaf ()
-	else begin
-		let commonClass = List.fold_left
-			(fun cur x -> if x.category = cur then cur else -1)
-			((List.hd trainset.set).category)
-			(List.tl trainset.set) in
-
-		if commonClass >= 0 then
-			(* Each trainVal has the same category: insert a leaf *)
-			DecisionLeaf(commonClass)
+		if trainset.setSize < majorityCasesThreshold then
+			(* #trainset < threshold => insert the majority vote leaf. *)
+			majorityLeaf ()
 		else begin
-			let maxGainFeature,maxGain = List.fold_left
-				(fun (i,x) (j,y) ->
-					(*Format.eprintf "%f " y ; (*DEBUG*) *)
-					if y > x then (j,y) else (i,x))
-				(-1,-1.)
-				(List.map (fun i -> i,featureGainRatio i)
-					(0 <|> trainset.nbFeatures))
-				in
-			(*Format.eprintf " -- sel. %d - %f, split %d ; %d elts@."
-				maxGainFeature maxGain (contThresholds.(maxGainFeature))
-				(getSetSize trainset); (*DEBUG*) *)
+			let commonClass = List.fold_left
+				(fun cur x -> if x.category = cur then cur else -1)
+				((List.hd trainset.set).category)
+				(List.tl trainset.set) in
 
-			if maxGain < epsilonGain then
-				majorityLeaf ()
-			else if trainset.featContinuity.(maxGainFeature) then begin
-				let threshold = contThresholds.(maxGainFeature) in
-				let emptyset = { trainset with set = [] ; setSize = 0 } in
-				let lower, upper = List.fold_left (fun (lset,uset) tv ->
-					if tv.data.(maxGainFeature) <= threshold then
-						(* NOTE Here it is important to keep <= and not <
-						Indeed when determining an integer threshold, we
-						use (val1+val2)/2, which rounds down to val1 if
-						val2 = val1+1 (and yes, we *do* handle the
-						negative values case, rounded towards 0).
-						If we use <, the generation could hang forever. *)
-						{ lset with
-							set = tv::lset.set ;
-							setSize = lset.setSize+1 }, uset
-					else
-						lset, {uset with
-							set = tv::uset.set ;
-							setSize = uset.setSize+1 }
-					) (emptyset,emptyset) trainset.set in
-				DecisionContinuousNode
-					(maxGainFeature, threshold, c45 lower, c45 upper)
-			end else begin
-				let submap = List.fold_left (fun map v ->
-					let sset = List.filter
-						(fun tv -> tv.data.(maxGainFeature) = v)
-						trainset.set in
-					DVMap.add v (c45 { trainset with
-							set = sset ;
-							setSize = List.length sset
-						}) map)
-						DVMap.empty
-						(0<|>(trainset.featureMax.(maxGainFeature)+1)) in
-				DecisionDiscreteNode (maxGainFeature,submap)
+			if commonClass >= 0 then
+				(* Each trainVal has the same category: insert a leaf *)
+				DecisionLeaf(commonClass)
+			else begin
+				let maxGainFeature,maxGain = List.fold_left
+					(fun (i,x) (j,y) ->
+						(*Format.eprintf "%f " y ; (*DEBUG*) *)
+						if y > x then (j,y) else (i,x))
+					(-1,-1.)
+					(List.map (fun i -> i,featureGainRatio i)
+						(0 <|> trainset.nbFeatures))
+					in
+				(*Format.eprintf " -- sel. %d - %f, split %d ; %d elts@."
+					maxGainFeature maxGain (contThresholds.(maxGainFeature))
+					(getSetSize trainset); (*DEBUG*) *)
+
+				if maxGain < epsilonGain then
+					majorityLeaf ()
+				else if trainset.featContinuity.(maxGainFeature) then begin
+					let threshold = contThresholds.(maxGainFeature) in
+					let emptyset = { trainset with set = [] ; setSize = 0 } in
+					let lower, upper = List.fold_left (fun (lset,uset) tv ->
+						if tv.data.(maxGainFeature) <=
+								Continuous(threshold) then
+							(* NOTE Here it is important to keep <= and not <
+							Indeed, the specification of X.avg is that, for
+							a < b, a <= X.avg a b < b. Thus, to separate a
+							from b, <= is needed. Else, we could hang forever
+							*)
+							{ lset with
+								set = tv::lset.set ;
+								setSize = lset.setSize+1 }, uset
+						else
+							lset, {uset with
+								set = tv::uset.set ;
+								setSize = uset.setSize+1 }
+						) (emptyset,emptyset) trainset.set in
+					DecisionContinuousNode
+						(maxGainFeature, threshold, c45 lower, c45 upper)
+				end else begin
+					let submap = List.fold_left (fun map v ->
+						let sset = List.filter
+							(fun tv -> tv.data.(maxGainFeature) = Discrete(v))
+							trainset.set in
+						DVMap.add (Discrete v) (c45 { trainset with
+								set = sset ;
+								setSize = List.length sset
+							}) map)
+							DVMap.empty
+							(0<|>(trainset.featureMax.(maxGainFeature)+1)) in
+					DecisionDiscreteNode (maxGainFeature,submap)
+				end
 			end
 		end
-	end
+end
 
+module IntOc45 = Make(struct 
+		type t = int
+		let compare = Pervasives.compare
+		let avg a b = (a+b) asr 1 (* Round down towards -infty *)
+	end)
+
+module FloatOc45 = Make(struct
+		type t = float
+		let compare = Pervasives.compare
+		let avg a b = (a+.b) /. 2.
+	end)
