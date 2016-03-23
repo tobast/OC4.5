@@ -33,7 +33,7 @@ module type Comparable = sig
 	(** A function that returns "the average" of its two arguments, or the
 	closest thing to it.
 
-	This is used to split the tree between two values, the only important thing
+	This is used to split the tree between two values. The only important thing
 	is that, if [a < b], [a <= avg a b < b].
 	*)
 end
@@ -163,8 +163,8 @@ Eg., to obtain a module {!Oc45.S} working on floats, you can define
 *)
 
 module IntOc45 : S with type contData = int
-(** Similar to [{!Oc45.Make}(struct type t = int let ... end)] *)
+(** Similar to {!Oc45.Make}[(struct type t = int let ... end)] *)
 
 module FloatOc45 : S with type contData = float
-(** Similar to [{!Oc45.Make}(struct type t = float let ... end)] *)
+(** Similar to {!Oc45.Make}[(struct type t = float let ... end)] *)
 
