@@ -314,26 +314,20 @@ module Make(X: Comparable) = struct
 					end
 				)
 			in
-			let rec bestPiv curMax curMaxPiv =
+			let rec bestPiv curMax (curMaxPiv: contData option) =
 				(try
 					let piv,entr = nextInfoGain () in
 					if entr > curMax then
-						bestPiv entr piv
+						bestPiv entr (Some piv)
 					else bestPiv curMax curMaxPiv
 				with Not_found ->
 					curMaxPiv,curMax)
 			in
 
-			(try
-				let origPiv,origEntr = nextInfoGain () in
-				let piv,gain = bestPiv origEntr origPiv in
-				contGains.(ft) <- gain ;
-				piv
-			with Not_found ->
-				raise (InvalidArgument "Empty data set."))
+			let piv,gain = bestPiv (-1.) None in
+			contGains.(ft) <- gain ;
+			piv
 		in
-		let contThresholds = Array.init (trainset.nbFeatures)
-			findContThreshold in
 
 		let featureGainRatio ft =
 			let rec gainLoss curLoss curSplit = function
@@ -370,6 +364,8 @@ module Make(X: Comparable) = struct
 			(* #trainset < threshold => insert the majority vote leaf. *)
 			majorityLeaf ()
 		else begin
+			let contThresholds = Array.init (trainset.nbFeatures)
+				findContThreshold in
 			let commonClass = List.fold_left
 				(fun cur x -> if x.category = cur then cur else -1)
 				((List.hd trainset.set).category)
@@ -394,7 +390,10 @@ module Make(X: Comparable) = struct
 				if maxGain < epsilonGain then
 					majorityLeaf ()
 				else if trainset.featContinuity.(maxGainFeature) then begin
-					let threshold = contThresholds.(maxGainFeature) in
+					let threshold = (match contThresholds.(maxGainFeature) with
+						| Some x -> x
+						| None -> raise (InvalidArgument ("Selected a feature"^
+							" without suitable threshold."))) in
 					let emptyset = { trainset with set = [] ; setSize = 0 } in
 					let lower, upper = List.fold_left (fun (lset,uset) tv ->
 						if tv.data.(maxGainFeature) <=
