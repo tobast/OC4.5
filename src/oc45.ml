@@ -21,6 +21,7 @@
  *****************************************************************************)
 
 (*********************** DATA TYPES ******************************************)
+
 exception InvalidArgument of string
 
 module type Comparable = sig
@@ -81,6 +82,13 @@ module Make(X: Comparable) = struct
 		featContinuity : bool array ;
 		nbCategories : int ;
 		setSize : int (* number of training values in the training set *)
+	}
+	type workingSet = {
+		(** The set c45 maintains while generating a tree *)
+		selectedFeat : bool array ;
+			(** Which features have already been selected? *)
+		origSet : trainVal list ;
+			(** The original data set *)
 	}
 	module DVMap = Map.Make (struct type t = dataVal let compare = compare end)
 
@@ -231,9 +239,18 @@ module Make(X: Comparable) = struct
 					then classify lowerTree data
 					else classify upperTree data 
 			)
+
+	let rec closestUnder curClosest bound l = match l, curClosest with
+	| [],None -> bound
+	| [],Some a -> a
+	| hd::tl,Some closest when hd > closest && hd <= bound ->
+		closestUnder (Some hd) bound tl
+	| hd::tl,None when hd <= bound ->
+		closestUnder (Some hd) bound tl
+	| _::tl,_ -> closestUnder curClosest bound tl
 		
 
-	let rec c45 trainset =
+	let rec do_c45 trainset workSet depth =
 		let fsum = List.fold_left (fun cur x -> cur +. x) 0. in
 		let log2 x = (log x) /. (log 2.) in
 
@@ -262,7 +279,7 @@ module Make(X: Comparable) = struct
 			in
 
 			let sorted=ref (List.sort
-				(fun tv1 tv2 -> compare (contVal ft tv1.data.(ft))
+				(fun tv1 tv2 -> X.compare (contVal ft tv1.data.(ft))
 					(contVal ft tv2.data.(ft))) trainset.set) in
 			let leftCard = ref trainset.setSize in
 			let leftFreq = Array.make (trainset.nbCategories) 0
@@ -346,10 +363,14 @@ module Make(X: Comparable) = struct
 
 			(match trainset.featContinuity.(ft) with
 			| true -> contGains.(ft)
-			| false ->
-				let wholeEntr = entropy (fun _ -> true) in
-				let loss,spl = gainLoss 0. 0. (trainset.featureMax.(ft)) in
-				(wholeEntr -. loss) /. (-.spl)
+			| false -> (match workSet.selectedFeat.(ft) with
+				| true -> 0. (* This discrete feature has previously been
+					selected for a split. *)
+				| false ->
+					let wholeEntr = entropy (fun _ -> true) in
+					let loss,spl = gainLoss 0. 0. (trainset.featureMax.(ft)) in
+					(wholeEntr -. loss) /. (-.spl)
+				)
 			)
 		in
 
@@ -360,9 +381,15 @@ module Make(X: Comparable) = struct
 				(fun tv -> tv.category) trainset.set))
 		in
 
-		if trainset.setSize < majorityCasesThreshold then
-			(* #trainset < threshold => insert the majority vote leaf. *)
-			majorityLeaf ()
+		let sq x = x * x in
+
+		if (trainset.setSize < majorityCasesThreshold) ||
+				(* Only a few test cases remain in this trainset *)
+				(depth > (max (sq trainset.nbFeatures)
+					(2*trainset.nbCategories))
+				(* Or the tree has grown beyond reasonable depth *)
+				) then
+			majorityLeaf () (* Majority vote to insert a leaf *)
 		else begin
 			let contThresholds = Array.init (trainset.nbFeatures)
 				findContThreshold in
@@ -390,10 +417,19 @@ module Make(X: Comparable) = struct
 				if maxGain < epsilonGain then
 					majorityLeaf ()
 				else if trainset.featContinuity.(maxGainFeature) then begin
-					let threshold = (match contThresholds.(maxGainFeature) with
+					let avgThreshold = (match contThresholds.(maxGainFeature)
+						with
 						| Some x -> x
 						| None -> raise (InvalidArgument ("Selected a feature"^
 							" without suitable threshold."))) in
+					let threshold = closestUnder None avgThreshold
+						(List.map
+							(fun x -> match x.data.(maxGainFeature) with
+								| Continuous(v) -> v
+								| Discrete(_) ->
+									raise (BadContinuity maxGainFeature))
+							workSet.origSet) in
+
 					let emptyset = { trainset with set = [] ; setSize = 0 } in
 					let lower, upper = List.fold_left (fun (lset,uset) tv ->
 						if tv.data.(maxGainFeature) <=
@@ -412,22 +448,34 @@ module Make(X: Comparable) = struct
 								setSize = uset.setSize+1 }
 						) (emptyset,emptyset) trainset.set in
 					DecisionContinuousNode
-						(maxGainFeature, threshold, c45 lower, c45 upper)
+						(maxGainFeature, threshold,
+							do_c45 lower workSet (depth+1),
+							do_c45 upper workSet (depth+1))
 				end else begin
+					workSet.selectedFeat.(maxGainFeature) <- true ;
 					let submap = List.fold_left (fun map v ->
 						let sset = List.filter
 							(fun tv -> tv.data.(maxGainFeature) = Discrete(v))
 							trainset.set in
-						DVMap.add (Discrete v) (c45 { trainset with
-								set = sset ;
-								setSize = List.length sset
-							}) map)
+						DVMap.add (Discrete v) (do_c45 { trainset with
+									set = sset ;
+									setSize = List.length sset
+								}
+								workSet
+								(depth+1)) map)
 							DVMap.empty
 							(0<|>(trainset.featureMax.(maxGainFeature)+1)) in
+					workSet.selectedFeat.(maxGainFeature) <- false ;
 					DecisionDiscreteNode (maxGainFeature,submap)
 				end
 			end
 		end
+
+	let c45 trainset =
+		let workSet = {
+			selectedFeat = Array.make (trainset.nbFeatures) false ;
+			origSet = trainset.set } in
+		do_c45 trainset workSet 0
 end
 
 module IntOc45 = Make(struct 

@@ -151,6 +151,7 @@ module type S = sig
 	(** Same as {!val:toDot}, but prints directly to [stdout]. *)
 	val toDotStdout : (Format.formatter -> contData -> unit) -> decisionTree
 		-> unit
+
 end
 (** Output signature of the functor {!Oc45.Make}. *)
 
@@ -167,4 +168,3 @@ module IntOc45 : S with type contData = int
 
 module FloatOc45 : S with type contData = float
 (** Similar to {!Oc45.Make}[(struct type t = float let ... end)] *)
-
