@@ -19,8 +19,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *****************************************************************************)
 
-(** This is the module's headcomment. And it's still a placeholder. What a
-shame, it's clearly TODO. *)
+(** This module is used to generate decision trees from data sets, using
+C4.5.
+
+To use this module, you first have to instantiate it for a given data type,
+which will be used for continuous data, with {!Oc45.Make}[(...)]. You can
+also use one of the two predefined modules {!IntOc45} and {!FloatOc45},
+using respectively native integers and float as a continuous data type.
+*)
 
 module type Comparable = sig
 	type t
