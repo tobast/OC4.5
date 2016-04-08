@@ -89,6 +89,8 @@ module Make(X: Comparable) = struct
 			(** Which features have already been selected? *)
 		origSet : trainVal list ;
 			(** The original data set *)
+		maxTreeDepth : int
+			(** Do not grow the tree deeper than this value. \infty : -1 *) 
 	}
 	module DVMap = Map.Make (struct type t = dataVal let compare = compare end)
 
@@ -381,18 +383,17 @@ module Make(X: Comparable) = struct
 				(fun tv -> tv.category) trainset.set))
 		in
 
-		let sq x = x * x in
-
 		if (trainset.setSize < majorityCasesThreshold) ||
 				(* Only a few test cases remain in this trainset *)
-				(depth > (max (sq trainset.nbFeatures)
-					(2*trainset.nbCategories))
+				(depth > workSet.maxTreeDepth)
 				(* Or the tree has grown beyond reasonable depth *)
-				) then
+				then
 			majorityLeaf () (* Majority vote to insert a leaf *)
 		else begin
 			let contThresholds = Array.init (trainset.nbFeatures)
-				findContThreshold in
+				(fun x -> match trainset.featContinuity.(x) with
+                    | false -> None
+                    | true -> findContThreshold x) in
 			let commonClass = List.fold_left
 				(fun cur x -> if x.category = cur then cur else -1)
 				((List.hd trainset.set).category)
@@ -472,9 +473,24 @@ module Make(X: Comparable) = struct
 		end
 
 	let c45 trainset =
+		let defaultDepthBound ts =
+			(** By default, the max bound of a tree depth is
+				nbDiscreteFeatures + nbContinuousFeatures * nbCategories
+				because the algorithm won't split more than once on a
+				discrete feature, and it seems reasonable to consider that
+				it should not split more than nbCategories times per
+				continuous feature. *)
+			let nbDiscreteFeat, nbContinuousFeat = Array.fold_left
+				(fun (discFt,contFt) x -> match x with
+					| true -> (discFt,contFt+1)
+					| false ->(discFt+1,contFt))
+				(0,0) ts.featContinuity in
+			nbDiscreteFeat + nbContinuousFeat * ts.nbCategories
+		in
 		let workSet = {
 			selectedFeat = Array.make (trainset.nbFeatures) false ;
-			origSet = trainset.set } in
+			origSet = trainset.set ;
+			maxTreeDepth = defaultDepthBound trainset } in
 		do_c45 trainset workSet 0
 end
 
