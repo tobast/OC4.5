@@ -430,15 +430,14 @@ module Make(X: Comparable) = struct
 			else begin
 				let maxGainFeature,maxGain = List.fold_left
 					(fun (i,x) (j,y) ->
-						(*Format.eprintf "%f " y ; (*DEBUG*) *)
+						(* Format.eprintf "%f " y ; (*DEBUG*) *)
 						if y > x then (j,y) else (i,x))
 					(-1,-1.)
 					(List.map (fun i -> i,featureGainRatio i)
 						(0 <|> trainset.nbFeatures))
 					in
-				(*Format.eprintf " -- sel. %d - %f, split %d ; %d elts@."
-					maxGainFeature maxGain (contThresholds.(maxGainFeature))
-					(getSetSize trainset); (*DEBUG*) *)
+				(* Format.eprintf " -- sel. %d - %f ; %d elts@."
+					maxGainFeature maxGain (getSetSize trainset); (*DEBUG*) *)
 
 				if maxGain < epsilonGain then
 					majorityLeaf ()
