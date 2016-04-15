@@ -94,7 +94,16 @@ module Make(X: Comparable) = struct
 	}
 	module DVMap = Map.Make (struct type t = dataVal let compare = compare end)
 
-	type decisionTree = DecisionLeaf of category
+    type decisionConstructionTree =
+        | CDecisionLeaf of category
+        | CDecisionEmptyLeaf
+		| CDecisionDiscreteNode of feature * decisionConstructionTree DVMap.t
+		| CDecisionContinuousNode of feature * contData (* threshold *) *
+				decisionConstructionTree (* lower *) *
+                decisionConstructionTree (* upper *)
+
+	type decisionTree =
+        | DecisionLeaf of category
 		| DecisionDiscreteNode of feature * decisionTree DVMap.t
 		| DecisionContinuousNode of feature * contData (* threshold *) *
 				decisionTree (* lower *) * decisionTree (* upper *)
@@ -229,10 +238,10 @@ module Make(X: Comparable) = struct
 		maxarg
 
 	(* classify data based on a decision tree *)
-	let rec classify tree data = match tree with
+    let rec classify tree data = match tree with
 		| DecisionLeaf category -> category
 		| DecisionDiscreteNode (feat, decisionTreeMap) ->
-			classify (DVMap.find data.(feat) decisionTreeMap) data
+            classify (DVMap.find data.(feat) decisionTreeMap) data
 		| DecisionContinuousNode (feat, thresh, lowerTree, upperTree) ->
 			(match data.(feat) with
 			| Discrete(_) -> raise (BadContinuity feat)
@@ -269,7 +278,9 @@ module Make(X: Comparable) = struct
 			-1. *. fsum (List.map (fun k ->
 						let x = (float_of_int k) /.
 							(float_of_int !nbTrainVal) in
-						x *. (log2 x))
+						(match k with
+                            | 0 -> 0.
+                            | _ -> x *. (log2 x)))
 					(Array.to_list catCount))
 		in
 
@@ -356,10 +367,13 @@ module Make(X: Comparable) = struct
 				let count = countFilter filter trainset.set in
 				let fcountrat = (float_of_int count) /.
 					(float_of_int trainset.setSize) in
+                let lfcountrat = (match count with
+                    | 0 -> 0.
+                    | _ -> log2 fcountrat) in
 				let entr = entropy filter in
 				gainLoss
 					(curLoss +. fcountrat *. entr)
-					(curSplit +. fcountrat *. log2 fcountrat)
+					(curSplit +. fcountrat *. lfcountrat)
 					(v-1)
 			in
 
@@ -379,7 +393,7 @@ module Make(X: Comparable) = struct
 		let majorityLeaf () =
 			(* In case there is no majority, the result is an
 			abritrary choice. *)
-			DecisionLeaf(majorityVote (List.map
+			CDecisionLeaf(majorityVote (List.map
 				(fun tv -> tv.category) trainset.set))
 		in
 
@@ -388,8 +402,11 @@ module Make(X: Comparable) = struct
 				(depth > workSet.maxTreeDepth)
 				(* Or the tree has grown beyond reasonable depth *)
 				then
-			majorityLeaf () (* Majority vote to insert a leaf *)
-		else begin
+            (match trainset.setSize with
+            | 0 -> CDecisionEmptyLeaf (* Eliminated afterwards. *)
+            | _ -> majorityLeaf () (* Majority vote to insert a leaf *)
+            )
+        else begin
 			let contThresholds = Array.init (trainset.nbFeatures)
 				(fun x -> match trainset.featContinuity.(x) with
                     | false -> None
@@ -401,7 +418,7 @@ module Make(X: Comparable) = struct
 
 			if commonClass >= 0 then
 				(* Each trainVal has the same category: insert a leaf *)
-				DecisionLeaf(commonClass)
+				CDecisionLeaf(commonClass)
 			else begin
 				let maxGainFeature,maxGain = List.fold_left
 					(fun (i,x) (j,y) ->
@@ -448,7 +465,7 @@ module Make(X: Comparable) = struct
 								set = tv::uset.set ;
 								setSize = uset.setSize+1 }
 						) (emptyset,emptyset) trainset.set in
-					DecisionContinuousNode
+					CDecisionContinuousNode
 						(maxGainFeature, threshold,
 							do_c45 lower workSet (depth+1),
 							do_c45 upper workSet (depth+1))
@@ -467,10 +484,72 @@ module Make(X: Comparable) = struct
 							DVMap.empty
 							(0<|>(trainset.featureMax.(maxGainFeature)+1)) in
 					workSet.selectedFeat.(maxGainFeature) <- false ;
-					DecisionDiscreteNode (maxGainFeature,submap)
+					CDecisionDiscreteNode (maxGainFeature,submap)
 				end
 			end
 		end
+
+    let guard f x = Format.eprintf "[[@."; let o=f x in Format.eprintf "\t]]@."; o
+    let openGuard () = Format.eprintf "<<@."
+    let closeGuard () = Format.eprintf ">>@."
+
+    let refineConstructionTree tree nbCat =
+        let sum2Arrays a1 a2 =
+            assert (Array.length a1 = Array.length a2);
+            Array.init (Array.length a1) (fun i -> a1.(i)+a2.(i))
+        in
+        let sumArrays l =
+            List.fold_left sum2Arrays (List.hd l) (List.tl l) in
+        let majority arr =
+            snd (
+                Array.fold_left (fun (pos,cur) x ->
+                    if arr.(cur) < x then
+                        (pos+1,pos)
+                    else (pos+1,cur)) (0,0) arr
+                )
+        in
+        let rec doRefine = function
+        | CDecisionLeaf c ->
+            Some (DecisionLeaf c,
+                (Array.init nbCat (fun i -> if i=c then 1 else 0)))
+        | CDecisionEmptyLeaf -> None 
+        | CDecisionDiscreteNode(ft,map) ->
+            let children = DVMap.fold (fun k v cur ->
+                let nv = doRefine v in
+                DVMap.add k nv cur) map (DVMap.empty) in
+            let votes = sumArrays (DVMap.fold (fun _ v cur ->
+                match v with
+                | None -> cur
+                | Some a -> (snd a)::cur) children []) in
+            let majorityCat = majority votes in
+            let childrenMap = (DVMap.fold (fun k v cur ->
+                DVMap.add k (match v with
+                    | None -> DecisionLeaf majorityCat
+                    | Some a -> fst a) cur) children DVMap.empty) in
+            let node = DecisionDiscreteNode(ft,childrenMap) in
+            Some (node,votes)
+        | CDecisionContinuousNode(ft,dat,cleft,cright) ->
+            let left = doRefine cleft
+            and right= doRefine cright in
+            let cList = [left; right] in
+            let votes = sumArrays (List.fold_left (fun cur v -> match v with
+                    | None -> cur
+                    | Some a -> (snd a)::cur)
+                [] cList) in
+            let majorityCat = majority votes in
+            let majLeaf = DecisionLeaf majorityCat in
+            let replaceNone repl = function
+            | None -> repl
+            | Some a -> fst a
+            in
+            Some (DecisionContinuousNode(ft,dat,
+                    replaceNone majLeaf left,
+                    replaceNone majLeaf right),
+                  votes)
+        in
+        (match doRefine tree with
+        | None -> assert false
+        | Some a -> fst a)
 
 	let c45 trainset =
 		let defaultDepthBound ts =
@@ -491,7 +570,8 @@ module Make(X: Comparable) = struct
 			selectedFeat = Array.make (trainset.nbFeatures) false ;
 			origSet = trainset.set ;
 			maxTreeDepth = defaultDepthBound trainset } in
-		do_c45 trainset workSet 0
+        let constructionTree = do_c45 trainset workSet 0 in
+        refineConstructionTree constructionTree (trainset.nbCategories)
 end
 
 module IntOc45 = Make(struct 
