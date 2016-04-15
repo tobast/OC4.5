@@ -512,6 +512,24 @@ module Make(X: Comparable) = struct
                     else (pos+1,cur)) (0,0) arr
                 )
         in
+        let onlyOneVal arr =
+            let module SweepTyp = struct
+                type t = NotYet | Single of int | Multiple end in
+            let res = fst 
+                (Array.fold_left (fun (cur,pos) x -> (match cur,x with
+                        | _,0 | SweepTyp.Multiple,_ -> (cur, pos+1)
+                        | SweepTyp.NotYet,_ -> (SweepTyp.Single pos, pos+1)
+                        | SweepTyp.Single _,_ -> (SweepTyp.Multiple, pos+1)))
+                    (SweepTyp.NotYet, 0) arr) in
+            (match res with
+                | SweepTyp.Single n -> Some n
+                | _ -> None)
+        in
+        let factorToLeaf votes elseNode = match onlyOneVal votes with
+        | None -> elseNode
+        | Some a -> DecisionLeaf a
+        in
+
         let rec doRefine = function
         | CDecisionLeaf c ->
             Some (DecisionLeaf c,
@@ -530,7 +548,8 @@ module Make(X: Comparable) = struct
                 DVMap.add k (match v with
                     | None -> DecisionLeaf majorityCat
                     | Some a -> fst a) cur) children DVMap.empty) in
-            let node = DecisionDiscreteNode(ft,childrenMap) in
+            let node = factorToLeaf votes
+                (DecisionDiscreteNode(ft,childrenMap)) in
             Some (node,votes)
         | CDecisionContinuousNode(ft,dat,cleft,cright) ->
             let left = doRefine cleft
@@ -546,10 +565,11 @@ module Make(X: Comparable) = struct
             | None -> repl
             | Some a -> fst a
             in
-            Some (DecisionContinuousNode(ft,dat,
-                    replaceNone majLeaf left,
-                    replaceNone majLeaf right),
-                  votes)
+            let node = factorToLeaf votes
+                    (DecisionContinuousNode(ft,dat,
+                        replaceNone majLeaf left,
+                        replaceNone majLeaf right)) in
+            Some (node,votes)
         in
         (match doRefine tree with
         | None -> assert false
