@@ -34,6 +34,7 @@ module type S = sig
 	exception InvalidArgument of string
 	type feature = int
 	exception BadContinuity of feature
+    exception DiscreteFeatOutOfBounds of feature*int
 	type category = int
 	type contData
 	type dataVal = Discrete of int | Continuous of contData
@@ -67,6 +68,7 @@ module Make(X: Comparable) = struct
 	exception InvalidArgument of string
 	type feature = int
 	exception BadContinuity of feature
+    exception DiscreteFeatOutOfBounds of feature*int
 	type category = int
 	type contData = X.t
 	type dataVal = Discrete of int | Continuous of contData
@@ -241,7 +243,13 @@ module Make(X: Comparable) = struct
     let rec classify tree data = match tree with
 		| DecisionLeaf category -> category
 		| DecisionDiscreteNode (feat, decisionTreeMap) ->
-            classify (DVMap.find data.(feat) decisionTreeMap) data
+            (try
+                classify (DVMap.find data.(feat) decisionTreeMap) data
+            with Not_found ->
+                let v = (match data.(feat) with
+                    | Discrete a -> a
+                    | Continuous _ -> raise (BadContinuity feat)) in
+                raise (DiscreteFeatOutOfBounds (feat,v)))
 		| DecisionContinuousNode (feat, thresh, lowerTree, upperTree) ->
 			(match data.(feat) with
 			| Discrete(_) -> raise (BadContinuity feat)
@@ -488,10 +496,6 @@ module Make(X: Comparable) = struct
 				end
 			end
 		end
-
-    let guard f x = Format.eprintf "[[@."; let o=f x in Format.eprintf "\t]]@."; o
-    let openGuard () = Format.eprintf "<<@."
-    let closeGuard () = Format.eprintf ">>@."
 
     let refineConstructionTree tree nbCat =
         let sum2Arrays a1 a2 =

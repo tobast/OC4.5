@@ -57,6 +57,16 @@ module type S = sig
 	(** Raised when appending a data vector with a continuous feature instead
 	of a discrete one, or the other way. *)
 
+    exception DiscreteFeatOutOfBounds of feature * int
+    (** [DiscreteFeatureOutOfBounds feat class] is raised when trying to
+    classify a data vector with its discrete feature [feat] equal to [class]
+    when the tree was created assuming that the values for this feature would
+    remain [< class].
+    This usually means that the value is very rare and was not encountered in
+    the training set, thus the limit inferred for the maximal value of this
+    feature is not high enough. You then have to set it manually, using
+    {!setFeatureMax}. *)
+
 	(** A category (ie. classification) id. *)
 	type category = int
 
